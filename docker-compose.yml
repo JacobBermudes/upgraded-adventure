@@ -1,0 +1,34 @@
+services:
+  sb-api:
+    image: jacobbermudes/sbapi:07
+    container_name: sb-api
+    ports:
+      - "9090:9090"
+    environment:
+      - REDIS_PASS=${REDIS_PASS}
+      - I_GBG=${I_GBG}
+      - AMN_IPS=${AMN_IPS}
+      - SNMS=${SNMS}
+      - CONTROL_USNM=${NGINX_USER}
+      - CONTROL_PASD=${NGINX_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - redis
+    networks:
+      - surfboost
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - rdb:/data
+    command: redis-server --requirepass ${REDIS_PASS}
+    networks:
+      - surfboost
+
+volumes:
+  amnezia-data:
+  rdb:
+
+networks:
+  surfboost:
+    driver: bridge
