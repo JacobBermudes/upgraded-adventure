@@ -28,6 +28,48 @@ type AuthRequest struct {
 	Signature string `json:"signature" binding:"required"`
 }
 
+func (h *APIHandler) AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token format"})
+			return
+		}
+		tokenString := parts[1]
+
+		jwtSecret := os.Getenv("API_SECRET")
+		if jwtSecret == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Empty JWT secret"})
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return []byte(jwtSecret), nil
+		})
+
+		if err != nil || !token.Valid {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
+		}
+
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if androidID, exists := claims["android_id"].(string); exists {
+				c.Set("android_id", androidID)
+			}
+		}
+
+		c.Next()
+	}
+}
+
 func (h *APIHandler) Auth(c *gin.Context) {
 	var req AuthRequest
 
@@ -82,6 +124,89 @@ func (h *APIHandler) Auth(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": tokenString,
+	})
+}
+
+func (h *APIHandler) GetServers(c *gin.Context) {
+	androidID, exists := c.Get("android_id")
+	if exists {
+		fmt.Printf("Android %v got server list\n", androidID)
+	}
+
+	servers := []string{"Qazaqstan", "Netherlands", "Germany", "USA"}
+
+	c.JSON(http.StatusOK, servers)
+}
+
+func (h *APIHandler) GetConfig(c *gin.Context) {
+	serverName := c.Query("server")
+	if serverName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "server parameter is required"})
+		return
+	}
+
+	androidID, _ := c.Get("android_id")
+	fmt.Printf("Android %v asking for a dope: %s\n", androidID, serverName)
+
+	var config string
+
+	switch serverName {
+	case "Qazaqstan":
+		config = `[Interface]
+PrivateKey = oHfgasx5lRqe960FQhGp18NIzubJqdmHcxJJqhot83o=
+Address = 10.0.0.11/32
+DNS = 8.8.8.8, 1.1.1.1
+MTU = 1420
+Jc = 5
+Jmin = 8
+Jmax = 80
+S1 = 113
+S2 = 80
+S3 = 168
+S4 = 1
+H1 = 458630
+H2 = 314753
+H3 = 525401
+H4 = 344614
+
+[Peer]
+PublicKey = OmMmXvE172EO8d7csTQlJn6CAhfUFMYUb/0/0PlLtgA=
+PresharedKey = Ft1ajTlSEJimgJHLQ4+DQ7fcoEAV69Pj7aHPlA++cTk=
+Endpoint = 94.131.2.34:51340
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+`
+	case "Netherland":
+		config = `[Interface]
+PrivateKey = QJJz5gC5R+1w58CRTBzLSDQwaCuWIUCMS5SPZnQcXU0=
+Address = 10.0.0.7/32
+DNS = 8.8.8.8, 1.1.1.1
+MTU = 1420
+Jc = 12
+Jmin = 8
+Jmax = 80
+S1 = 95
+S2 = 142
+S3 = 217
+S4 = 21
+H1 = 827483
+H2 = 264615
+H3 = 524096
+H4 = 881759
+
+[Peer]
+PublicKey = DD008OrxaYkXM+xSBNSJQf2lOuPHtLvwjhTWeA+soik=
+PresharedKey = 0O8SXsOSvuKmfDxcj9xXSu964cdjO+3P6+QBJNlx3aw=
+Endpoint = 82.38.71.36:51340
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25`
+	default:
+		c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"config": config,
 	})
 }
 

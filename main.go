@@ -42,6 +42,13 @@ func main() {
     v1 := r.Group("/v1")
     {
         v1.POST("/auth", api.Auth)
+
+		secG := v1.Group("/")
+		secG.Use(api.AuthMiddleware())
+		{
+			secG.GET("/servers", api.GetServers)
+			secG.GET("/config", api.GetConfig)
+		}
     }
 
 	r.Run(":9090")
