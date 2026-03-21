@@ -114,7 +114,7 @@ func (h *APIHandler) Auth(c *gin.Context) {
 
 	claims := jwt.MapClaims{
 		"android_id": req.AndroidID,
-		"exp":        time.Now().Add(time.Hour * 24 * 30).Unix(),
+		"exp":        time.Now().Add(time.Hour * 24).Unix(),
 		"iat":        time.Now().Unix(),
 	}
 
