@@ -15,10 +15,74 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type APIHandler struct {
 	RDB *redis.Client
+}
+
+type AuthRequest struct {
+	AndroidID string `json:"android_id" binding:"required"`
+	Timestamp int64  `json:"timestamp" binding:"required"`
+	Signature string `json:"signature" binding:"required"`
+}
+
+func (h *APIHandler) Auth(c *gin.Context) {
+	var req AuthRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
+		return
+	}
+
+	now := time.Now().Unix()
+	if now-req.Timestamp > 300 || now-req.Timestamp < -5 {
+		fmt.Printf("Request timestamp out of range: %d (now: %d)\n", req.Timestamp, now)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "request expired"})
+		return
+	}
+
+	apiSecret := os.Getenv("API_SECRET")
+	if apiSecret == "" {
+		apiSecret = "im_fool"
+	}
+
+	message := fmt.Sprintf("%s.%d", req.AndroidID, req.Timestamp)
+
+	mac := hmac.New(sha256.New, []byte(apiSecret))
+	mac.Write([]byte(message))
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(req.Signature), []byte(expectedSignature)) {
+		fmt.Printf("❌ Signature mismatch!\nMessage: %s\nGot: %s\nExpected: %s\n",
+			message, req.Signature, expectedSignature)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
+		return
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "extra_fool"
+	}
+
+	claims := jwt.MapClaims{
+		"android_id": req.AndroidID,
+		"exp":        time.Now().Add(time.Hour * 24 * 30).Unix(),
+		"iat":        time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(jwtSecret))
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": tokenString,
+	})
 }
 
 func (h *APIHandler) Legacy_handshake(c *gin.Context) {

@@ -1,6 +1,6 @@
 services:
   sb-api:
-    image: jacobbermudes/sbapi:07
+    image: jacobbermudes/sbapi:08
     container_name: sb-api
     ports:
       - "9090:9090"
@@ -12,6 +12,7 @@ services:
       - CONTROL_USNM=${NGINX_USER}
       - CONTROL_PASD=${NGINX_PASSWORD}
       - SECRET_KEY=${SECRET_KEY}
+      - API_SECRET=${API_SECRET}
     depends_on:
       - redis
     networks:

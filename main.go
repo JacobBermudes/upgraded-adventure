@@ -39,5 +39,10 @@ func main() {
 	r.GET("/servers", api.Legacy_AuthMiddleware(), api.Legacy_getConfigs)
 	//  LEGACY FINISH
 
+    v1 := r.Group("/v1")
+    {
+        v1.POST("/auth", api.Auth)
+    }
+
 	r.Run(":9090")
 }
