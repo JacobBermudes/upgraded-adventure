@@ -43,9 +43,10 @@ func (h *APIHandler) AuthMiddleware() gin.HandlerFunc {
 		}
 		tokenString := parts[1]
 
-		jwtSecret := os.Getenv("API_SECRET")
+		jwtSecret := os.Getenv("JWT_SECRET")
 		if jwtSecret == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Empty JWT secret"})
+			return
 		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
