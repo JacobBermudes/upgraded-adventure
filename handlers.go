@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -80,9 +81,11 @@ func (h *APIHandler) Auth(c *gin.Context) {
 	}
 
 	now := time.Now().Unix()
-	if now-req.Timestamp > 300 || now-req.Timestamp < -5 {
-		fmt.Printf("Request timestamp out of range: %d (now: %d)\n", req.Timestamp, now)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "request expired"})
+	diff := float64(now - req.Timestamp)
+
+	if math.Abs(diff) > 300 {
+		fmt.Printf("Request timestamp out of range. Server: %d, Client: %d, Diff: %.0f\n", now, req.Timestamp, diff)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "time out of sync"})
 		return
 	}
 
