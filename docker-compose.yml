@@ -1,6 +1,6 @@
 services:
   sb-api:
-    image: jacobbermudes/sbapi:alpha0.1
+    image: jacobbermudes/sbapi:alpha0.11
     container_name: sb-api
     ports:
       - "9090:9090"
