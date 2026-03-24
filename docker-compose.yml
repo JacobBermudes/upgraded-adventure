@@ -15,6 +15,9 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - API_SECRET=${API_SECRET}
       - JWT_SECRET=${JWT_SECRET}
+      - PSQL_USER=${PSQL_USER}
+      - PSQL_PASS=${PSQL_PASS}
+      - PSQL_DB=${PSQL_DB}
     depends_on:
       - redis
     networks:
