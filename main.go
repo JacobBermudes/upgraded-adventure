@@ -53,19 +53,6 @@ func initDB() *sql.DB {
 	}
 	log.Println("psql connected successfully")
 
-	createConfigsTable := `
-	CREATE TABLE IF NOT EXISTS user_configs (
-		android_id VARCHAR(255) REFERENCES users(android_id) ON DELETE CASCADE,
-		server_id VARCHAR(50) REFERENCES servers(id) ON DELETE CASCADE,
-		config_text TEXT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (android_id, server_id)
-	);`
-	_, err = db.Exec(createConfigsTable)
-	if err != nil {
-		log.Fatalf("Fail to create config db: %v", err)
-	}
-
 	createUsersTable := `
 	CREATE TABLE IF NOT EXISTS users (
 		android_id VARCHAR(255) PRIMARY KEY,
@@ -88,6 +75,19 @@ func initDB() *sql.DB {
 	);`
 	if _, err = db.Exec(createServersTable); err != nil {
 		log.Fatalf("Fail to create servers db: %v", err)
+	}
+
+	createConfigsTable := `
+	CREATE TABLE IF NOT EXISTS user_configs (
+		android_id VARCHAR(255) REFERENCES users(android_id) ON DELETE CASCADE,
+		server_id VARCHAR(50) REFERENCES servers(id) ON DELETE CASCADE,
+		config_text TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (android_id, server_id)
+	);`
+	_, err = db.Exec(createConfigsTable)
+	if err != nil {
+		log.Fatalf("Fail to create config db: %v", err)
 	}
 
 	return db
