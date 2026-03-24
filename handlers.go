@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,12 +22,18 @@ import (
 
 type APIHandler struct {
 	RDB *redis.Client
+	DB  *sql.DB
 }
 
 type AuthRequest struct {
 	AndroidID string `json:"android_id" binding:"required"`
 	Timestamp int64  `json:"timestamp" binding:"required"`
 	Signature string `json:"signature" binding:"required"`
+}
+
+type ServerListResponse struct {
+	ID         string `json:"ID"`
+	ServerName string `json:"Name"`
 }
 
 func (h *APIHandler) AuthMiddleware() gin.HandlerFunc {
@@ -132,12 +139,54 @@ func (h *APIHandler) Auth(c *gin.Context) {
 }
 
 func (h *APIHandler) GetServers(c *gin.Context) {
-	androidID, exists := c.Get("android_id")
-	if exists {
-		fmt.Printf("Android %v got server list\n", androidID)
+	androidID, _ := c.Get("android_id")
+
+	fmt.Printf("Android %v requests server list\n", androidID)
+	ctx := c.Request.Context()
+
+	var isPremium bool
+	userQuery := `SELECT is_premium FROM users WHERE android_id = $1`
+
+	err := h.DB.QueryRowContext(ctx, userQuery, androidID).Scan(&isPremium)
+	if err != nil && err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error checking user status"})
+		return
 	}
 
-	servers := []string{"Qazaqstan", "Netherlands", "Germany", "USA"}
+	var serverQuery string
+	if isPremium {
+		serverQuery = `SELECT id, name FROM servers`
+	} else {
+		serverQuery = `SELECT id, name FROM servers WHERE is_premium = false`
+	}
+
+	rows, err := h.DB.QueryContext(ctx, serverQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch servers"})
+		return
+	}
+	defer rows.Close()
+
+	var servers []ServerListResponse
+
+	for rows.Next() {
+		var srv ServerListResponse
+		if err := rows.Scan(&srv.ID, &srv.ServerName); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading server data"})
+			return
+		}
+		servers = append(servers, srv)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error during iteration"})
+		return
+	}
+
+	if len(servers) == 0 {
+		c.JSON(http.StatusOK, []ServerListResponse{})
+		return
+	}
 
 	c.JSON(http.StatusOK, servers)
 }

@@ -1,4 +1,4 @@
-## ENV
+## API
 * I_GBG
 * AMN_IPS
 * SNMS
@@ -7,3 +7,8 @@
 * CONTROL_PASD
 * API_SECRET
 * JWT_SECRET
+
+## PSQL
+* PSQL_USER
+* PSQL_PASS
+* PSQL_DB
