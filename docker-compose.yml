@@ -1,6 +1,6 @@
 services:
   sb-api:
-    image: jacobbermudes/sbapi:alpha0.2
+    image: jacobbermudes/sbapi:alpha0.21
     container_name: sb-api
     restart: always
     ports:
@@ -20,6 +20,7 @@ services:
       - PSQL_DB=${PSQL_DB}
     depends_on:
       - redis
+      - db
     networks:
       - surfboost
 

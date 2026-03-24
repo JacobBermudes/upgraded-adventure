@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -35,7 +36,8 @@ func initDB() *sql.DB {
 	psql_pass := os.Getenv("PSQL_PASS")
 	psql_db := os.Getenv("PSQL_DB")
 
-	dsn := "host=localhost port=5432 user=" + psql_user + " password=" + psql_pass + " dbname=" + psql_db + " sslmode=disable"
+	dsn := fmt.Sprintf("host=db port=5432 user=%s password=%s dbname=%s sslmode=disable",
+		psql_user, psql_pass, psql_db)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
