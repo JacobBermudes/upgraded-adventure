@@ -1,6 +1,6 @@
 services:
   sb-api:
-    image: jacobbermudes/sbapi:alpha0.22
+    image: jacobbermudes/sbapi:alpha0.3
     container_name: sb-api
     restart: always
     ports:

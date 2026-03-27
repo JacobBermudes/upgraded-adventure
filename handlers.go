@@ -200,28 +200,23 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 
 	androidIDValue, _ := c.Get("android_id")
 	androidID, _ := androidIDValue.(string)
-	fmt.Printf("Android %v asking for a dope: %s\n", androidID, server_id)
 
 	var config string
 
 	configQuery := `SELECT config_text FROM user_configs WHERE android_id = $1 AND server_id = $2`
 	err := h.DB.QueryRowContext(c.Request.Context(), configQuery, androidID, server_id).Scan(&config)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching config"})
-		return
-	}
 
-	if err == sql.ErrNoRows {
+	switch err {
+	case nil:
+		c.JSON(http.StatusOK, gin.H{"config": config})
+		return
+	case sql.ErrNoRows:
 		var ip, login, pass string
 		ipQuery := `SELECT ip, login, password FROM servers WHERE id = $1`
 
 		err := h.DB.QueryRowContext(c.Request.Context(), ipQuery, server_id).Scan(&ip, &login, &pass)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching ip"})
-			return
-		}
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
 		}
 
@@ -232,7 +227,8 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		sr_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
 		sr_res, err := admin_panel.Do(sr_req)
 		if err != nil {
-			panic(fmt.Errorf("sreq send error: %v", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to server"})
+			return
 		}
 		defer sr_res.Body.Close()
 
@@ -240,10 +236,12 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		sid := ""
 		sr_r_j, err := io.ReadAll(sr_res.Body)
 		if err != nil {
-			panic(fmt.Errorf("sreq read error: %v", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read server response"})
+			return
 		}
 		if err := json.Unmarshal(sr_r_j, &amsrs); err != nil {
-			panic(fmt.Errorf("sreq parse error: %v", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse server response"})
+			return
 		}
 		if len(amsrs) > 0 {
 			sid = amsrs[0].Sid
@@ -258,7 +256,7 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		}
 		jsonData, err := json.Marshal(payload)
 		if err != nil {
-			fmt.Printf("Obj parse fail: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare request"})
 			return
 		}
 		crcs_req, _ := http.NewRequest("POST", req_url+"/api/servers/"+sid+"/clients", bytes.NewBuffer(jsonData))
@@ -266,7 +264,7 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		crcs_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
 		crcsresp, err := admin_panel.Do(crcs_req)
 		if err != nil {
-			fmt.Printf("Client create req fail: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create client on server"})
 			return
 		}
 		defer crcsresp.Body.Close()
@@ -274,10 +272,11 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		var cfrep CrcsResp
 		cfres, err := io.ReadAll(crcsresp.Body)
 		if err != nil {
-			panic(fmt.Errorf("clid resp read error: %v", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read client response"})
+			return
 		}
 		if err := json.Unmarshal(cfres, &cfrep); err != nil {
-			fmt.Println("clid resp parse fail:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse client response"})
 			return
 		}
 
@@ -286,7 +285,7 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		getcfg_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
 		getcfg_resp, err := admin_panel.Do(getcfg_req)
 		if err != nil {
-			fmt.Printf("Client create req fail: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch client config"})
 			return
 		}
 		defer getcfg_resp.Body.Close()
@@ -294,10 +293,11 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		var concfg Getcfg
 		getcfgbody, err := io.ReadAll(getcfg_resp.Body)
 		if err != nil {
-			panic(fmt.Errorf("conf resp read error: %v", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read client config"})
+			return
 		}
 		if err = json.Unmarshal(getcfgbody, &concfg); err != nil {
-			fmt.Println("conf resp parse fail:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse client config"})
 			return
 		}
 
@@ -313,17 +313,12 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 		_, err = h.DB.ExecContext(c.Request.Context(), insertQuery, androidID, server_id, concfg.Clncfg)
 
 		if err != nil {
-			fmt.Printf("Fail to patch BD %s: %v\n", androidID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save generated config"})
 			return
 		}
 
-		config = concfg.Clncfg
+		c.JSON(http.StatusOK, gin.H{"config": concfg.Clncfg})
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"config": config,
-	})
 }
 
 func (h *APIHandler) Legacy_handshake(c *gin.Context) {
