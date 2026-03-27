@@ -148,8 +148,16 @@ func (h *APIHandler) GetServers(c *gin.Context) {
 	userQuery := `SELECT is_premium FROM users WHERE android_id = $1`
 
 	err := h.DB.QueryRowContext(ctx, userQuery, androidID).Scan(&isPremium)
-	if err != nil && err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error checking user status"})
+	if err == sql.ErrNoRows {
+		// Create new user with default values
+		insertQuery := `INSERT INTO users (android_id) VALUES ($1)`
+		if _, err := h.DB.ExecContext(ctx, insertQuery, androidID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error creating user"})
+			return
+		}
+		isPremium = false
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching user"})
 		return
 	}
 
