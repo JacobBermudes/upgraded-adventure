@@ -138,6 +138,29 @@ func (h *APIHandler) Auth(c *gin.Context) {
 	})
 }
 
+func (h *APIHandler) GetData(c *gin.Context) {
+	androidIDValue, _ := c.Get("android_id")
+	androidID, _ := androidIDValue.(string)
+
+	var balance float64
+	balanceQuery := `SELECT balance FROM users WHERE android_id = $1`
+	err := h.DB.QueryRowContext(c.Request.Context(), balanceQuery, androidID).Scan(&balance)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching balance"})
+		return
+	}
+
+	var premium bool
+	premiumQuery := `SELECT is_premium FROM users WHERE android_id = $1`
+	err = h.DB.QueryRowContext(c.Request.Context(), premiumQuery, androidID).Scan(&premium)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching premium status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Balance": balance, "IsPremium": premium})
+}
+
 func (h *APIHandler) GetServers(c *gin.Context) {
 	androidID, _ := c.Get("android_id")
 

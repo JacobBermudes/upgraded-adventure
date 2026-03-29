@@ -113,6 +113,7 @@ func main() {
 		secG := v1.Group("/")
 		secG.Use(api.AuthMiddleware())
 		{
+			secG.GET("/data", api.GetData)
 			secG.GET("/servers", api.GetServers)
 			secG.GET("/config", api.GetConfig)
 		}
