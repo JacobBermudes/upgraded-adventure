@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,12 +22,18 @@ import (
 
 type APIHandler struct {
 	RDB *redis.Client
+	DB  *sql.DB
 }
 
 type AuthRequest struct {
 	AndroidID string `json:"android_id" binding:"required"`
 	Timestamp int64  `json:"timestamp" binding:"required"`
 	Signature string `json:"signature" binding:"required"`
+}
+
+type ServerListResponse struct {
+	ID         string `json:"ID"`
+	ServerName string `json:"Name"`
 }
 
 func (h *APIHandler) AuthMiddleware() gin.HandlerFunc {
@@ -131,87 +138,218 @@ func (h *APIHandler) Auth(c *gin.Context) {
 	})
 }
 
-func (h *APIHandler) GetServers(c *gin.Context) {
-	androidID, exists := c.Get("android_id")
-	if exists {
-		fmt.Printf("Android %v got server list\n", androidID)
+func (h *APIHandler) GetData(c *gin.Context) {
+	androidIDValue, _ := c.Get("android_id")
+	androidID, _ := androidIDValue.(string)
+
+	var balance float64
+	balanceQuery := `SELECT balance FROM users WHERE android_id = $1`
+	err := h.DB.QueryRowContext(c.Request.Context(), balanceQuery, androidID).Scan(&balance)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching balance"})
+		return
 	}
 
-	servers := []string{"Qazaqstan", "Netherlands", "Germany", "USA"}
+	var premium bool
+	premiumQuery := `SELECT is_premium FROM users WHERE android_id = $1`
+	err = h.DB.QueryRowContext(c.Request.Context(), premiumQuery, androidID).Scan(&premium)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching premium status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Balance": balance, "IsPremium": premium})
+}
+
+func (h *APIHandler) GetServers(c *gin.Context) {
+	androidID, _ := c.Get("android_id")
+
+	fmt.Printf("Android %v requests server list\n", androidID)
+	ctx := c.Request.Context()
+
+	var isPremium bool
+	userQuery := `SELECT is_premium FROM users WHERE android_id = $1`
+
+	err := h.DB.QueryRowContext(ctx, userQuery, androidID).Scan(&isPremium)
+	if err == sql.ErrNoRows {
+		// Create new user with default values
+		insertQuery := `INSERT INTO users (android_id) VALUES ($1)`
+		if _, err := h.DB.ExecContext(ctx, insertQuery, androidID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error creating user"})
+			return
+		}
+		isPremium = false
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching user"})
+		return
+	}
+
+	var serverQuery string
+	if isPremium {
+		serverQuery = `SELECT id, name FROM servers`
+	} else {
+		serverQuery = `SELECT id, name FROM servers WHERE is_premium = false`
+	}
+
+	rows, err := h.DB.QueryContext(ctx, serverQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch servers"})
+		return
+	}
+	defer rows.Close()
+
+	var servers []ServerListResponse
+
+	for rows.Next() {
+		var srv ServerListResponse
+		if err := rows.Scan(&srv.ID, &srv.ServerName); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading server data"})
+			return
+		}
+		servers = append(servers, srv)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error during iteration"})
+		return
+	}
+
+	if len(servers) == 0 {
+		c.JSON(http.StatusOK, []ServerListResponse{})
+		return
+	}
 
 	c.JSON(http.StatusOK, servers)
 }
 
 func (h *APIHandler) GetConfig(c *gin.Context) {
-	serverName := c.Query("server")
-	if serverName == "" {
+	server_id := c.Query("server")
+	if server_id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "server parameter is required"})
 		return
 	}
 
-	androidID, _ := c.Get("android_id")
-	fmt.Printf("Android %v asking for a dope: %s\n", androidID, serverName)
+	androidIDValue, _ := c.Get("android_id")
+	androidID, _ := androidIDValue.(string)
 
 	var config string
 
-	switch serverName {
-	case "Qazaqstan":
-		config = `[Interface]
-PrivateKey = oHfgasx5lRqe960FQhGp18NIzubJqdmHcxJJqhot83o=
-Address = 10.0.0.11/32
-DNS = 8.8.8.8, 1.1.1.1
-MTU = 1420
-Jc = 5
-Jmin = 8
-Jmax = 80
-S1 = 113
-S2 = 80
-S3 = 168
-S4 = 1
-H1 = 458630
-H2 = 314753
-H3 = 525401
-H4 = 344614
+	configQuery := `SELECT config_text FROM user_configs WHERE android_id = $1 AND server_id = $2`
+	err := h.DB.QueryRowContext(c.Request.Context(), configQuery, androidID, server_id).Scan(&config)
 
-[Peer]
-PublicKey = OmMmXvE172EO8d7csTQlJn6CAhfUFMYUb/0/0PlLtgA=
-PresharedKey = Ft1ajTlSEJimgJHLQ4+DQ7fcoEAV69Pj7aHPlA++cTk=
-Endpoint = 94.131.2.34:51340
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
-`
-	case "Netherland":
-		config = `[Interface]
-PrivateKey = QJJz5gC5R+1w58CRTBzLSDQwaCuWIUCMS5SPZnQcXU0=
-Address = 10.0.0.7/32
-DNS = 8.8.8.8, 1.1.1.1
-MTU = 1420
-Jc = 12
-Jmin = 8
-Jmax = 80
-S1 = 95
-S2 = 142
-S3 = 217
-S4 = 21
-H1 = 827483
-H2 = 264615
-H3 = 524096
-H4 = 881759
-
-[Peer]
-PublicKey = DD008OrxaYkXM+xSBNSJQf2lOuPHtLvwjhTWeA+soik=
-PresharedKey = 0O8SXsOSvuKmfDxcj9xXSu964cdjO+3P6+QBJNlx3aw=
-Endpoint = 82.38.71.36:51340
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25`
-	default:
-		c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
+	switch err {
+	case nil:
+		c.JSON(http.StatusOK, gin.H{"config": config})
 		return
-	}
+	case sql.ErrNoRows:
+		var ip, login, pass string
+		ipQuery := `SELECT ip, login, password FROM servers WHERE id = $1`
 
-	c.JSON(http.StatusOK, gin.H{
-		"config": config,
-	})
+		err := h.DB.QueryRowContext(c.Request.Context(), ipQuery, server_id).Scan(&ip, &login, &pass)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching ip"})
+			return
+		}
+
+		req_url := "http://" + ip + ":8080"
+		admin_panel := &http.Client{Timeout: 10 * time.Second}
+
+		sr_req, _ := http.NewRequest("GET", req_url+"/api/servers", nil)
+		sr_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
+		sr_res, err := admin_panel.Do(sr_req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to server"})
+			return
+		}
+		defer sr_res.Body.Close()
+
+		var amsrs []S_con
+		sid := ""
+		sr_r_j, err := io.ReadAll(sr_res.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read server response"})
+			return
+		}
+		if err := json.Unmarshal(sr_r_j, &amsrs); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse server response"})
+			return
+		}
+		if len(amsrs) > 0 {
+			sid = amsrs[0].Sid
+		}
+
+		payload := CrcsReq{
+			Name:           androidID,
+			ApplyISettings: true,
+			ISettings: Is{
+				I1: os.Getenv("I_GBG"),
+			},
+		}
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare request"})
+			return
+		}
+		crcs_req, _ := http.NewRequest("POST", req_url+"/api/servers/"+sid+"/clients", bytes.NewBuffer(jsonData))
+		crcs_req.Header.Set("Content-Type", "application/json")
+		crcs_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
+		crcsresp, err := admin_panel.Do(crcs_req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create client on server"})
+			return
+		}
+		defer crcsresp.Body.Close()
+
+		var cfrep CrcsResp
+		cfres, err := io.ReadAll(crcsresp.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read client response"})
+			return
+		}
+		if err := json.Unmarshal(cfres, &cfrep); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse client response"})
+			return
+		}
+
+		getcfgurl := req_url + "/api/servers/" + sid + "/clients/" + cfrep.Client.Clid + "/config-both"
+		getcfg_req, _ := http.NewRequest("GET", getcfgurl, bytes.NewBuffer(jsonData))
+		getcfg_req.SetBasicAuth(os.Getenv("CONTROL_USNM"), os.Getenv("CONTROL_PASD"))
+		getcfg_resp, err := admin_panel.Do(getcfg_req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch client config"})
+			return
+		}
+		defer getcfg_resp.Body.Close()
+
+		var concfg Getcfg
+		getcfgbody, err := io.ReadAll(getcfg_resp.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read client config"})
+			return
+		}
+		if err = json.Unmarshal(getcfgbody, &concfg); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse client config"})
+			return
+		}
+
+		insertQuery := `
+			INSERT INTO user_configs (android_id, server_id, config_text)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (android_id, server_id) 
+			DO UPDATE SET 
+				config_text = EXCLUDED.config_text, 
+				created_at = CURRENT_TIMESTAMP;
+		`
+
+		_, err = h.DB.ExecContext(c.Request.Context(), insertQuery, androidID, server_id, concfg.Clncfg)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save generated config"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"config": concfg.Clncfg})
+	}
 }
 
 func (h *APIHandler) Legacy_handshake(c *gin.Context) {

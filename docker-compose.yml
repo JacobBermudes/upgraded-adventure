@@ -1,7 +1,8 @@
 services:
   sb-api:
-    image: jacobbermudes/sbapi:alpha0.111
+    image: jacobbermudes/sbapi:alpha0.4
     container_name: sb-api
+    restart: always
     ports:
       - "9090:9090"
     environment:
@@ -14,21 +15,40 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - API_SECRET=${API_SECRET}
       - JWT_SECRET=${JWT_SECRET}
+      - PSQL_USER=${PSQL_USER}
+      - PSQL_PASS=${PSQL_PASS}
+      - PSQL_DB=${PSQL_DB}
     depends_on:
       - redis
+      - db
     networks:
       - surfboost
 
   redis:
     image: redis:7-alpine
+    restart: always
     volumes:
       - rdb:/data
     command: redis-server --requirepass ${REDIS_PASS}
     networks:
       - surfboost
+    
+  db:
+    image: postgres:18.3-alpine
+    container_name: psql
+    restart: always
+    environment:
+      POSTGRES_USER: ${PSQL_USER}
+      POSTGRES_PASSWORD: ${PSQL_PASS}
+      POSTGRES_DB: ${PSQL_DB}
+    networks:
+      - surfboost 
+    volumes:
+      - pg_data:/var/lib/postgresql/data
 
 volumes:
   rdb:
+  pg_data:
 
 networks:
   surfboost:
