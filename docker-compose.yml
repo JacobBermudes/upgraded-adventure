@@ -18,6 +18,9 @@ services:
       - PSQL_USER=${PSQL_USER}
       - PSQL_PASS=${PSQL_PASS}
       - PSQL_DB=${PSQL_DB}
+      - FF_APIKEY=${FF_APIKEY}
+      - FF_APISECRET=${FF_APISECRET}
+      - CRYPTOWALLET=${CRYPTOWALLET}
     depends_on:
       - redis
       - db

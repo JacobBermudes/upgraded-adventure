@@ -18,11 +18,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
+
+	fixedfloat "surfboost/pkg"
 )
 
 type APIHandler struct {
-	RDB *redis.Client
-	DB  *sql.DB
+	RDB      *redis.Client
+	DB       *sql.DB
+	FFClient *fixedfloat.Client
 }
 
 type AuthRequest struct {
@@ -34,6 +37,11 @@ type AuthRequest struct {
 type ServerListResponse struct {
 	ID         string `json:"ID"`
 	ServerName string `json:"Name"`
+}
+
+type CryptoPayRequest struct {
+	FromCcy string  `json:"from_ccy" binding:"required"`
+	Amount  float64 `json:"amount" binding:"required"`
 }
 
 func (h *APIHandler) AuthMiddleware() gin.HandlerFunc {
@@ -143,22 +151,26 @@ func (h *APIHandler) GetData(c *gin.Context) {
 	androidID, _ := androidIDValue.(string)
 
 	var balance float64
-	balanceQuery := `SELECT balance FROM users WHERE android_id = $1`
-	err := h.DB.QueryRowContext(c.Request.Context(), balanceQuery, androidID).Scan(&balance)
+	var premFinish sql.NullTime
+
+	query := `SELECT balance, prem_finish FROM users WHERE android_id = $1`
+
+	err := h.DB.QueryRowContext(c.Request.Context(), query, androidID).Scan(&balance, &premFinish)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching balance"})
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching user data"})
 		return
 	}
 
-	var premium bool
-	premiumQuery := `SELECT is_premium FROM users WHERE android_id = $1`
-	err = h.DB.QueryRowContext(c.Request.Context(), premiumQuery, androidID).Scan(&premium)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching premium status"})
-		return
-	}
+	isPremium := premFinish.Valid && premFinish.Time.After(time.Now())
 
-	c.JSON(http.StatusOK, gin.H{"Balance": balance, "IsPremium": premium})
+	c.JSON(http.StatusOK, gin.H{
+		"Balance":   balance,
+		"IsPremium": isPremium,
+	})
 }
 
 func (h *APIHandler) GetServers(c *gin.Context) {
@@ -350,6 +362,67 @@ func (h *APIHandler) GetConfig(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{"config": concfg.Clncfg})
 	}
+}
+
+func (h *APIHandler) CryptoPay(c *gin.Context) {
+	androidIDValue, exists := c.Get("android_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req CryptoPayRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	params := map[string]interface{}{
+		"fromCcy":   req.FromCcy,
+		"toCcy":     os.Getenv("CRYPTO_CCY"),
+		"amount":    req.Amount,
+		"direction": "from",
+		"type":      "float",
+		"toAddress": os.Getenv("CRYPTOWALLET"),
+	}
+
+	resp, err := h.FFClient.CreateOrder(params)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	//Add to toable crypto payments
+
+	c.JSON(http.StatusOK, gin.H{
+		"order_id":    resp.Data.ID,
+		"order_token": resp.Data.Token,
+		"pay_address": resp.Data.Address,
+		"message":     "Please send funds to the pay_address",
+	})
+}
+
+func (h *APIHandler) CryptoPayStatus(c *gin.Context) {
+	orderID := c.Query("id")
+	orderToken := c.Query("token")
+
+	if orderID == "" || orderToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id and token are required"})
+		return
+	}
+
+	resp, err := h.FFClient.GetOrder(orderID, orderToken)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"order_id":   resp.Data.ID,
+		"status":     resp.Data.Status,
+		"amount_in":  resp.Data.AmountFrom,
+		"amount_out": resp.Data.AmountTo,
+	})
 }
 
 func (h *APIHandler) Legacy_handshake(c *gin.Context) {

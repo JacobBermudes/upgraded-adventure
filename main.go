@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	fixedfloat "surfboost/pkg"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,8 @@ func initDB() *sql.DB {
 		android_id VARCHAR(255) PRIMARY KEY,
 		is_premium BOOLEAN DEFAULT FALSE,
 		balance INTEGER DEFAULT 0,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		prem_finish TIMESTAMP
 	);`
 	if _, err = db.Exec(createUsersTable); err != nil {
 		log.Fatalf("Fail to create users db: %v", err)
@@ -90,15 +92,33 @@ func initDB() *sql.DB {
 		log.Fatalf("Fail to create config db: %v", err)
 	}
 
+	createPaymentTable := `
+	CREATE TABLE IF NOT EXISTS user_payments (
+		android_id VARCHAR(255),
+		type VARCHAR(50),
+		amount DECIMAL(10, 2) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	_, err = db.Exec(createPaymentTable)
+	if err != nil {
+		log.Fatalf("Fail to create payment db: %v", err)
+	}
+
 	return db
 }
 
 func main() {
 	r := gin.Default()
 
+	ffClient := fixedfloat.NewClient(
+		os.Getenv("FF_API_KEY"),
+		os.Getenv("FF_API_SECRET"),
+	)
+
 	api := &APIHandler{
-		RDB: initRedis(),
-		DB:  initDB(),
+		RDB:      initRedis(),
+		DB:       initDB(),
+		FFClient: ffClient,
 	}
 
 	//	LEGACY
@@ -116,6 +136,9 @@ func main() {
 			secG.GET("/data", api.GetData)
 			secG.GET("/servers", api.GetServers)
 			secG.GET("/config", api.GetConfig)
+
+			secG.POST("/cryptopay", api.CryptoPay)
+			secG.GET("/cryptopay/status", api.CryptoPayStatus)
 		}
 	}
 
