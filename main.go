@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -10,26 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	_ "github.com/lib/pq"
 )
-
-func initRedis() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
-		DB:       0,
-		Password: os.Getenv("REDIS_PASS"),
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Could not connect to Redis: %v", err)
-	}
-
-	return client
-}
 
 func initDB() *sql.DB {
 
@@ -119,7 +100,6 @@ func main() {
 	)
 
 	api := &APIHandler{
-		RDB:      initRedis(),
 		DB:       initDB(),
 		FFClient: ffClient,
 	}

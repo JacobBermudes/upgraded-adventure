@@ -15,14 +15,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 
 	fixedfloat "surfboost/pkg"
 )
 
 type APIHandler struct {
-	RDB      *redis.Client
 	DB       *sql.DB
 	FFClient *fixedfloat.Client
 }
