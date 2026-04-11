@@ -94,9 +94,12 @@ func initDB() *sql.DB {
 
 	createPaymentTable := `
 	CREATE TABLE IF NOT EXISTS user_payments (
+		order_id VARCHAR(255) PRIMARY KEY,
 		android_id VARCHAR(255),
-		type VARCHAR(50),
+		token VARCHAR(255) NOT NULL,
+		type VARCHAR(50) DEFAULT 'RUB',
 		amount DECIMAL(10, 2) NOT NULL,
+		status VARCHAR(50) DEFAULT 'NEW',
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err = db.Exec(createPaymentTable)
@@ -120,11 +123,6 @@ func main() {
 		DB:       initDB(),
 		FFClient: ffClient,
 	}
-
-	//	LEGACY
-	r.POST("/handshake", api.Legacy_AuthMiddleware(), api.Legacy_handshake)
-	r.GET("/servers", api.Legacy_AuthMiddleware(), api.Legacy_getConfigs)
-	//  LEGACY FINISH
 
 	v1 := r.Group("/v1")
 	{

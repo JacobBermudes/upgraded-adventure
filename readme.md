@@ -1,18 +1,13 @@
 ## API (.env)
 * I_GBG
-* AMN_IPS (deprecated)
-* SNMS (deprecated)
-* REDIS_PASS (deprecated)
-* CONTROL_USNM (deprecated)
-* CONTROL_PASD (deprecated)
 * API_SECRET
 * JWT_SECRET
 * FF_APIKEY
 * FF_APISECRET
 * CRYPTOWALLET
-* CRYPTO_CCY
+* X-CMC_PRO_API_KEY
 
-## PSQL
+## PSQL (.env)
 * PSQL_USER
 * PSQL_PASS
 * PSQL_DB
