@@ -139,7 +139,6 @@ func (h *APIHandler) CryptoPayStatus(c *gin.Context) {
 }
 
 func cryptoAmount(amount float64, fromCcy string) float64 {
-
 	u, _ := url.Parse("https://pro-api.coinmarketcap.com/v2/tools/price-conversion")
 	q := u.Query()
 	q.Set("amount", fmt.Sprintf("%f", amount))
@@ -147,29 +146,56 @@ func cryptoAmount(amount float64, fromCcy string) float64 {
 	q.Set("convert", fromCcy)
 	u.RawQuery = q.Encode()
 
-	req, _ := http.NewRequest("GET", u.String(), nil)
-	req.Header.Add("X-CMC_PRO_API_KEY", os.Getenv("X-CMC_PRO_API_KEY"))
+	fmt.Printf("Req CMC: %s\n", u.String())
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		fmt.Printf("❌ Error http.NewRequest: %v\n", err)
+		return 0
+	}
+
+	apiKey := os.Getenv("X-CMC_PRO_API_KEY")
+	if apiKey == "" {
+		fmt.Println("X-CMC_PRO_API_KEY empty!")
+	}
+
+	req.Header.Add("X-CMC_PRO_API_KEY", apiKey)
+	req.Header.Add("Accept", "application/json")
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
+		fmt.Printf("Network error: %v\n", err)
 		return 0
 	}
 	defer res.Body.Close()
+
 	body, _ := io.ReadAll(res.Body)
+
+	fmt.Printf("Resp CMC (Status %d): %s\n", res.StatusCode, string(body))
+
+	if res.StatusCode != 200 {
+		return 0
+	}
 
 	var response CMCResponse
 	if err := json.Unmarshal(body, &response); err != nil {
+		fmt.Printf("Error unmarshal JSON: %v\n", err)
 		return 0
 	}
 
 	if len(response.Data) == 0 {
+		fmt.Println("Data empty")
 		return 0
 	}
 
 	cryptoData, exists := response.Data[0].Quote[fromCcy]
 	if !exists {
+		fmt.Printf("Coin not found! %s\n", fromCcy)
 		return 0
 	}
 
-	return cryptoData.Price * 1.05
+	finalAmount := cryptoData.Price * 1.05
+	fmt.Printf("✅ Done: %f RUB = %f %s (+ 5%%)\n", amount, finalAmount, fromCcy)
+
+	return finalAmount
 }
