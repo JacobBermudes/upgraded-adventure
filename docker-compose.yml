@@ -5,17 +5,8 @@ services:
     restart: always
     ports:
       - "9090:9090"
-    environment:
-      - I_GBG=${I_GBG}
-      - API_SECRET=${API_SECRET}
-      - JWT_SECRET=${JWT_SECRET}
-      - PSQL_USER=${PSQL_USER}
-      - PSQL_PASS=${PSQL_PASS}
-      - PSQL_DB=${PSQL_DB}
-      - FF_APIKEY=${FF_APIKEY}
-      - FF_APISECRET=${FF_APISECRET}
-      - CRYPTOWALLET=${CRYPTOWALLET}
-      - X-CMC_PRO_API_KEY=${X-CMC_PRO_API_KEY}
+    env_file:
+      - .env
     depends_on:
       - db
     networks:
