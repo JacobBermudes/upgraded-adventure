@@ -27,21 +27,19 @@ type FFResponse struct {
 type CreateOrderResponse struct {
 	FFResponse
 	Data struct {
-		ID      string `json:"id"`
-		Token   string `json:"token"`
-		Address string `json:"address"`
+		ID    string `json:"id"`
+		Token string `json:"token"`
+		From  struct {
+			Address string `json:"address"`
+		} `json:"from"`
 	} `json:"data"`
 }
 
 type OrderStatusResponse struct {
 	FFResponse
 	Data struct {
-		ID         string  `json:"id"`
-		Status     string  `json:"status"`
-		FromCcy    string  `json:"fromCcy"`
-		ToCcy      string  `json:"toCcy"`
-		AmountFrom float64 `json:"amountFrom,string"`
-		AmountTo   float64 `json:"amountTo,string"`
+		ID     string `json:"id"`
+		Status string `json:"status"`
 	} `json:"data"`
 }
 
@@ -95,7 +93,7 @@ func (c *Client) call(method string, payload interface{}) ([]byte, error) {
 }
 
 func (c *Client) CreateOrder(params map[string]interface{}) (*CreateOrderResponse, error) {
-	res, err := c.call("createOrder", params)
+	res, err := c.call("create", params)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +115,7 @@ func (c *Client) GetOrder(id, token string) (*OrderStatusResponse, error) {
 		"id":    id,
 		"token": token,
 	}
-	res, err := c.call("getOrder", payload)
+	res, err := c.call("order", payload)
 	if err != nil {
 		return nil, err
 	}

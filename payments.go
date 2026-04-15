@@ -76,7 +76,7 @@ func (h *APIHandler) CryptoPay(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"pay_address": resp.Data.Address,
+		"pay_address": resp.Data.From.Address,
 	})
 }
 
@@ -146,8 +146,6 @@ func cryptoAmount(amount float64, fromCcy string) float64 {
 	q.Set("convert", fromCcy)
 	u.RawQuery = q.Encode()
 
-	fmt.Printf("Req CMC: %s\n", u.String())
-
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		fmt.Printf("❌ Error http.NewRequest: %v\n", err)
@@ -171,8 +169,6 @@ func cryptoAmount(amount float64, fromCcy string) float64 {
 
 	body, _ := io.ReadAll(res.Body)
 
-	fmt.Printf("Resp CMC (Status %d): %s\n", res.StatusCode, string(body))
-
 	if res.StatusCode != 200 {
 		return 0
 	}
@@ -195,7 +191,5 @@ func cryptoAmount(amount float64, fromCcy string) float64 {
 	}
 
 	finalAmount := cryptoData.Price * 1.05
-	fmt.Printf("✅ Done: %f RUB = %f %s (+ 5%%)\n", amount, finalAmount, fromCcy)
-
 	return finalAmount
 }
