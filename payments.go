@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -54,6 +55,7 @@ func (h *APIHandler) CryptoPay(c *gin.Context) {
 
 	resp, err := h.FFClient.CreateOrder(params)
 	if err != nil {
+		log.Printf("CreateOrder error: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
