@@ -136,7 +136,16 @@ func (h *APIHandler) GetData(c *gin.Context) {
 	err := h.DB.QueryRowContext(c.Request.Context(), query, androidID).Scan(&balance, &premFinish)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			// Create new user with default values
+			insertQuery := `INSERT INTO users (android_id) VALUES ($1)`
+			if _, err := h.DB.ExecContext(c.Request.Context(), insertQuery, androidID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error creating user"})
+				return
+			}
+			c.JSON(http.StatusCreated, gin.H{
+				"Balance":   0,
+				"IsPremium": false,
+			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error fetching user data"})
@@ -162,12 +171,6 @@ func (h *APIHandler) GetServers(c *gin.Context) {
 
 	err := h.DB.QueryRowContext(ctx, userQuery, androidID).Scan(&isPremium)
 	if err == sql.ErrNoRows {
-		// Create new user with default values
-		insertQuery := `INSERT INTO users (android_id) VALUES ($1)`
-		if _, err := h.DB.ExecContext(ctx, insertQuery, androidID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error creating user"})
-			return
-		}
 		isPremium = false
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error fetching user"})
